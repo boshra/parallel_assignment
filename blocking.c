@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
 	MPI_Status status;
 	
 	//Define sizes and matrices
-	int n = 5;
+	int n = 1000;
 	int m = 32;
 	int row_per = n/numprocs;
 	int rem = n%numprocs;
@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
 				matrix_2[j][i] = (float) rand() / (float) RAND_MAX;
 			}
 		}
-
+		/*
 		printf("Created random matrices\n");
 
 		displayMatrix(matrix_1, n, m);
@@ -81,7 +81,7 @@ int main(int argc, char *argv[])
 
 		displayMatrix(result, n, n);
 		printf("-------------------\n");
-		
+		*/
 		time_t start, end;
 		start = clock();
 
@@ -113,9 +113,13 @@ int main(int argc, char *argv[])
 		MPI_Recv(&result[row_per*3], (row_per+rem)*n, MPI_FLOAT, 3,0, MPI_COMM_WORLD, &status);
 
 		end = clock();
-
+			
+		/*
 		displayMatrix(result, n, n);
 		printf("-------------------\n");
+		*/
+
+		
 		printf("Time to run parallel code: %f\n", (1000*(double)end-start)/CLOCKS_PER_SEC);
 
 		start = clock();
@@ -125,21 +129,23 @@ int main(int argc, char *argv[])
 		printf("-------------------\n");
 		displayMatrix(matrix_2, m, n);
 		printf("-------------------\n");
-		*/
+		
 
 		displayMatrix(result, n, n);
 		printf("-------------------\n");
-		
+		*/
 
 		float C_serial[n][n];
 
 		Matrix_Multiply(&matrix_1, &matrix_2, &C_serial, n, m, n);
 	
 		end = clock();
+		
 		printf("Time to run serial code: %f\n", (1000*(double)end-start)/CLOCKS_PER_SEC);
-
+		/*
 		printf("-------------------\n");
 		displayMatrix(C_serial, n, n);
+		*/
 		printf("Are result matrices the same? %d\n", IsEqual(result, C_serial, n, n));
 
 	}
