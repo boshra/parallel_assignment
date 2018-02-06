@@ -11,6 +11,9 @@ mpimake: $(OBJ)
 test: mpimake
 	mpirun -n 1  mpimake
 
+report:
+	pdflatex report.tex
+
 .PHONY: clean
 
 clean:

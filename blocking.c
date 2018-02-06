@@ -49,14 +49,14 @@ int main(int argc, char *argv[])
 	MPI_Status status;
 	
 	//Define sizes and matrices
-	int n = 4;
-	int m = 4;
+	int n = 5;
+	int m = 32;
 	int row_per = n/numprocs;
+	int rem = n%numprocs;
 	float matrix_1 [n][m];
 	float matrix_2 [m][n];
 	float result [n][n];
 	int row, column;
-
 
 	//Generate random matrix of size n
 	if(procid == 0)
@@ -81,52 +81,91 @@ int main(int argc, char *argv[])
 
 		displayMatrix(result, n, n);
 		printf("-------------------\n");
+		
+		time_t start, end;
+		start = clock();
 
 		//Send both matrices to each subprocess
-		MPI_Send(&matrix_1[row_per*m], row_per*m, MPI_FLOAT, 1, 0, MPI_COMM_WORLD);
-		MPI_Send(matrix_2, m*n, MPI_FLOAT, 1, 0, MPI_COMM_WORLD);	
+		MPI_Send(&matrix_1[row_per][0], row_per*m, MPI_FLOAT, 1, 0, MPI_COMM_WORLD);
+		MPI_Send(&matrix_2, m*n, MPI_FLOAT, 1, 0, MPI_COMM_WORLD);	
 
-		MPI_Send(&matrix_1[row_per*m*2], row_per*m, MPI_FLOAT, 2, 0, MPI_COMM_WORLD);
-		MPI_Send(matrix_2, m*n, MPI_FLOAT, 2, 0, MPI_COMM_WORLD);
+		MPI_Send(&matrix_1[row_per*2][0], row_per*m, MPI_FLOAT, 2, 0, MPI_COMM_WORLD);
+		MPI_Send(&matrix_2, m*n, MPI_FLOAT, 2, 0, MPI_COMM_WORLD);
 		
-		MPI_Send(&matrix_1[row_per*m*3], row_per*m, MPI_FLOAT, 3, 0, MPI_COMM_WORLD);
-		MPI_Send(matrix_2, m*n, MPI_FLOAT, 3, 0, MPI_COMM_WORLD);
+		MPI_Send(&matrix_1[row_per*3][0], (row_per+rem)*m, MPI_FLOAT, 3, 0, MPI_COMM_WORLD);
+		MPI_Send(&matrix_2, m*n, MPI_FLOAT, 3, 0, MPI_COMM_WORLD);
 
 
 		//Calculate a part of the result matrix
-		//TODO
+		int k;
+		for (i = 0; i < row_per; i++)
+			for (j = 0; j < n; j++)
+			{
+				result[i][j] = 0;
+				for (k = 0; k < m; k++)
+					result[i][j] += matrix_1[i][k] * matrix_2[k][j];
+			}
 		
 
 		//Receive Data from other processes
-		MPI_Recv(&result[row_per*n], row_per*n, MPI_FLOAT, 1,0, MPI_COMM_WORLD, &status);
+		MPI_Recv(&result[row_per], row_per*n, MPI_FLOAT, 1,0, MPI_COMM_WORLD, &status);
+		MPI_Recv(&result[row_per*2], row_per*n, MPI_FLOAT, 2,0, MPI_COMM_WORLD, &status);
+		MPI_Recv(&result[row_per*3], (row_per+rem)*n, MPI_FLOAT, 3,0, MPI_COMM_WORLD, &status);
+
+		end = clock();
 
 		displayMatrix(result, n, n);
 		printf("-------------------\n");
+		printf("Time to run parallel code: %f\n", (1000*(double)end-start)/CLOCKS_PER_SEC);
 
-		MPI_Recv(&result[row_per*n*2], row_per*n, MPI_FLOAT, 2,0, MPI_COMM_WORLD, &status);
-		MPI_Recv(&result[row_per*n*3], row_per*n, MPI_FLOAT, 3,0, MPI_COMM_WORLD, &status);
+		start = clock();
 
+		/*
 		displayMatrix(matrix_1, n, m);
 		printf("-------------------\n");
 		displayMatrix(matrix_2, m, n);
 		printf("-------------------\n");
+		*/
 
 		displayMatrix(result, n, n);
-		
-		Matrix_Multiply(matrix_1, matrix_2, result, n, m, n);
-	
 		printf("-------------------\n");
-		displayMatrix(result, m, n);
+		
+
+		float C_serial[n][n];
+
+		Matrix_Multiply(&matrix_1, &matrix_2, &C_serial, n, m, n);
+	
+		end = clock();
+		printf("Time to run serial code: %f\n", (1000*(double)end-start)/CLOCKS_PER_SEC);
+
+		printf("-------------------\n");
+		displayMatrix(C_serial, n, n);
+		printf("Are result matrices the same? %d\n", IsEqual(result, C_serial, n, n));
 
 	}
 	else	
 	{
-		ierr = MPI_Recv(matrix_1, row_per*m, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, &status);
-		ierr = MPI_Recv(matrix_2, m*n, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, &status);
+		if(procid == 3)
+			row_per = row_per + rem;
+
+		ierr = MPI_Recv(&matrix_1, row_per*m, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, &status);
+		ierr = MPI_Recv(&matrix_2, m*n, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, &status);
 		
-		Matrix_Multiply(matrix_1, matrix_2, result, row_per, m, row_per);	
+		//displayMatrix(matrix_1, row_per, m);
+		//printf("-------------------\n");
 		
-		MPI_Send(result, row_per*row_per, MPI_FLOAT, 0,0,MPI_COMM_WORLD);
+		
+		int i, j, k;
+		for (i = 0; i < row_per; i++)
+			for (j = 0; j < n; j++)
+			{
+				result[i][j] = 0;
+				for (k = 0; k < m; k++)
+					result[i][j] += matrix_1[i][k] * matrix_2[k][j];
+			}
+
+
+		MPI_Send(&result, row_per*n, MPI_FLOAT, 0,0,MPI_COMM_WORLD);
 		
 	/*	
 	float square [n][n];
