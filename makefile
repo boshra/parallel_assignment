@@ -1,8 +1,9 @@
 CC=mpicc
 CFLAGS=
-OBJ=blocking.o 
+SRCPATH=src/
+REPPATH=report/
 
-%.o: %.c $(DEPS)
+%.o: $(SRCPATH)%.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 all: bl nonbl coll
@@ -16,13 +17,13 @@ nonbl: nonblocking.o
 coll: collective.o
 	mpicc -o $@ $^ $(CFLAGS)
 
-test: mpimake
+test: all
 	bash test.sh
 
-report:
-	pdflatex report.tex
+report.pdf:
+	pdflatex $(REPPATH)report.tex
 
 .PHONY: clean
 
 clean:
-	rm -f *.o *.txt
+	rm -f *.o *.txt *.log *.aux

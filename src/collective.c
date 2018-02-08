@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
 	float matrix_1 [n][m];
 	float matrix_2 [m][n];
 	float result [n][n];
-	int row, column;
+	float C_serial[n][n];
 
 	//Generate random matrix of size n
 	if(procid == 0)
@@ -139,7 +139,7 @@ int main(int argc, char *argv[])
 		printf("-------------------\n");
 		*/
 
-		float C_serial[n][n];
+
 
 		Matrix_serial(&matrix_1, &matrix_2, &C_serial, n, m, n);
 	

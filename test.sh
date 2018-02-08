@@ -9,8 +9,8 @@ do
 	do
 		for j in {1..10}
 		do
-			echo "mpirun $FLAGS $m $i >> $m_result$i.txt"
-			mpirun $FLAGS $m $i >> $m_result$i.txt
+			echo "mpirun $FLAGS $m $i >> $m\_result$i.txt"
+			mpirun $FLAGS $m $i >> $m\_result$i.txt
 		done
 	done
 done
