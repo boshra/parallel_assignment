@@ -5,11 +5,19 @@ OBJ=blocking.o
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
-mpimake: $(OBJ)
+all: bl nonbl coll
+
+bl: blocking.o
+	mpicc -o $@ $^ $(CFLAGS)
+
+nonbl: nonblocking.o
+	mpicc -o $@ $^ $(CFLAGS)
+
+coll: collective.o
 	mpicc -o $@ $^ $(CFLAGS)
 
 test: mpimake
-	mpirun -n 1  mpimake
+	bash test.sh
 
 report:
 	pdflatex report.tex
@@ -17,4 +25,4 @@ report:
 .PHONY: clean
 
 clean:
-	rm -f *.o
+	rm -f *.o *.txt
