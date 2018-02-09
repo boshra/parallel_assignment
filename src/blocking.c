@@ -124,7 +124,7 @@ int main(int argc, char *argv[])
 		*/
 
 		
-		printf("%.1f\t", (1000*(double)end-start)/CLOCKS_PER_SEC);
+		printf("bl,%d,%.1f,", n,(1000*(double)end-start)/CLOCKS_PER_SEC);
 
 		start = clock();
 

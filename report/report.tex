@@ -47,26 +47,37 @@ As per the assignment instructions, sizes of matrices A and B are defined as $N 
 \begin{equation}
 C_{xj} = A_{xk} \times B_{ki}
 \end{equation}
-where k [0,31]\footnote{\label{^1}Zero indexing is assumed for consistency between the equations and the C code presented below.}.
+where k $\in [0,31]$\footnote{\label{^1}Zero indexing is assumed for consistency between the equations and the C code presented below.}. To accomplish parallel implementations of matrix multiplication for all the afore-mentioned communication types between processes, I used the equation highlighted in 1.3. Each matrix was represented as a 2D array of floats and kept on the stack. No heap allocation (malloc/calloc) of memory was used and that was seen as sufficient for development purposes.
+
+As a user of an i5 processor with 4 cores, I am able to run a total of 4 processes (the upper limit as provided in the assignment instructions. That number was held constant througout all experiments presented in the this report. Each process was bound to a core; a process can only run on its preassigned core in a 1 to 1 relation). Binding cores is achieved using the \emph{--bind-by core} option in mpirun.
+
+
 
 \chapter{Communication-specific Implementations}
 \section{Blocking P2P communication}
-To accomplish a parallel implementation of matrix multiplication using blocking communication between processes, the equation highlighted in 1.3 was used. Each matrix was represented as a 2D array of floats and kept on the stack. No heap allocation (malloc/calloc) of memory was used and that was seen as sufficient for development purposes.
-As a user of an i5 processor with 4 cores, I am able to run a total of 4 processes (the upper limit as provided in the assignment instructions. 
+
+Parallel matrix multiplication utilizing blocking P2P communication was achieved with the two MPI functions: MPI\_Send and MPI\_Recv. The main method in the blocking.c file contains two main code blocks: one for the first process (\#0) and one for the remaining three. After definitions of shared variables and initialization of the MPI environment, process \#0 proceeds to create the two matrices using the random number generator. The \#0 process divides the work between the 4 cores by splitting the rows of the first matrix. In cases where the total number of rows is not divisble by four, the remaining rows are added to the last (\#3) process's workload.
+
+Data transfer of the matrices for computation is done using a total of six MPI\_Send calls from the \#0 process. Each of the other remaining processes is sent its assigned rows of the first matrix and a complete copy of the second matrix, in this order. Each send call has a direct destination process but no tag. 
+
+After all data are received on the worker\footnote{\label{^2}Technically all processes in the presented algorithm are workers; however, I choose to refer to the first as a master and the others as workers even though the master (\#0) does computations on the first division of rows} side, all processes compute the multiplication of both matrices they receive -- in the case of \#0, the first $N/4$ rows.
+
+Upon completion of computations, the workers call the MPI\_Send function with the master is the target. Workers send the result sub-matrices with dimensions $N/4 \times N$ \footnote{\label{^3}If N is not divisible by 4, last process sends back an $(N/4 + N mod 4) \times N$ sized matrix} each. The master receives results using corresponding MPI\_Recv calls with pointers to indexed parts of the results matrix. Completion of all the receive calls end the parallel matrix multiplication algorithm; however, I have added code to compare the result achieved with the parallel approach to the one calculated by the Matrix\_serial function. If they do not produce the same matrix (using IsEqual()), the master exits with an error.
+
+\section{Collective communication}
 
 \section{Non-blocking P2P communication}
 
-\section{Collective communication}
 
 \chapter{General Discussion}
 
 \appendix
 \chapter*{Code appendix}
 
-\lstinputlisting[language=bash, breaklines]{makefile}
-\lstinputlisting[breaklines]{src/blocking.c}
-\lstinputlisting[breaklines]{src/nonblocking.c}
-\lstinputlisting[breaklines]{src/collective.c}
+\lstinputlisting[language=bash, breaklines]{../makefile}
+\lstinputlisting[breaklines]{../src/blocking.c}
+\lstinputlisting[breaklines]{../src/nonblocking.c}
+\lstinputlisting[breaklines]{../src/collective.c}
 
 
 

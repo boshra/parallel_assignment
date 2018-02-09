@@ -21,9 +21,9 @@ test: all
 	bash test.sh
 
 report.pdf:
-	pdflatex $(REPPATH)report.tex
+	cd report && pdflatex $(REPPATH)report.tex
 
 .PHONY: clean
 
 clean:
-	rm -f *.o *.txt *.log *.aux
+	rm -f *.o *.txt *.pdf *.csv *.log *.aux

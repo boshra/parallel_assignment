@@ -1,0 +1,8 @@
+Author: Rober Boshra
+Title: Assignment 1, Matrix Multiplication Using OpenMPI
+
+Instructions:
+-------------
+`make all` generates all executables with all 3 communication methods
+`make report` generates the report in the report directory from the .tex file
+`make test` generates a .csv file with running times for each of the communication types
