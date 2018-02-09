@@ -4,10 +4,10 @@
 \usepackage{listings}
 \usepackage{amsmath}
 \usepackage{color}
+\usepackage{graphicx}
 \author{Rober Boshra}
 \title{Matrix Multiplication Using MPI\\ECE 709, Assignment 1}
 \begin{document}
-
 
 \definecolor{javared}{rgb}{0.6,0,0} % for strings
 \definecolor{javagreen}{rgb}{0.25,0.5,0.35} % comments
@@ -31,6 +31,8 @@ showstringspaces=false,
 title=\lstname}
 
 \maketitle
+\tableofcontents
+
 \chapter{Introduction}
 As part of the first assignment, I implemented parallel matrix multiplication utilizing the 3 main MPI communication methods: blocking point-to-point (P2P), non-blocking P2P, and collective. In the present report I will discuss each of my implementations in order discussing running time and factors affecting it.
 
@@ -43,14 +45,14 @@ The main algorithm used for all three different implementation used the property
 C_{xj} = A_{xk} \times B_{kj}
 \end{equation}
 Given the independence of results for each subset x, rows can be divided across processors available for computation. In cases where the rows are not divisible by the number of processors, the last processor can process the extra remaining rows. Note that adding the last rows to the last single process's load might not be optimal. This will be discussed further in the last chapter. 
-As per the assignment instructions, sizes of matrices A and B are defined as $N \times 32$ and $32 \times N$, respectively. This reduces equation 1.2 to:
-\begin{equation}
-C_{xj} = A_{xk} \times B_{ki}
-\end{equation}
-where k $\in [0,31]$\footnote{\label{^1}Zero indexing is assumed for consistency between the equations and the C code presented below.}. To accomplish parallel implementations of matrix multiplication for all the afore-mentioned communication types between processes, I used the equation highlighted in 1.3. Each matrix was represented as a 2D array of floats and kept on the stack. No heap allocation (malloc/calloc) of memory was used and that was seen as sufficient for development purposes.
 
-As a user of an i5 processor with 4 cores, I am able to run a total of 4 processes (the upper limit as provided in the assignment instructions. That number was held constant througout all experiments presented in the this report. Each process was bound to a core; a process can only run on its preassigned core in a 1 to 1 relation). Binding cores is achieved using the \emph{--bind-by core} option in mpirun.
+As per the assignment instructions, sizes of matrices A and B are defined as $N \times 32$ and $32 \times N$, respectively. This reduces equation 1.2 to only where k $\in [0,31]$\footnote{\label{^1}Zero indexing is assumed for consistency between the equations and the C code presented below.}. To accomplish parallel implementations of matrix multiplication for all the afore-mentioned communication types between processes, I used the equation highlighted in 1.2. Each matrix was represented as a 2D array of floats and kept on the stack. No heap allocation (malloc/calloc) of memory was used and that was seen as sufficient for development purposes.
 
+Theoretically, the execution of a serial matrix computation on a matrix as described in equation 1.1 can be rounded to $n \times m \times p$ multiplications and a similar number of additions. This gives a total of $O(nmp)$, thus an $O(n^3)$ assuming $n>m,p$. Given the constraint in the assignment instructions this can be reduced further (equation 1.2). Since m is constant at 32 and $n=p$, the computation complexity of the problem reduces to growing with $O(n^2)$. Please note that this puts into consideration only the commonly known algorithm of matrix multiplication and others might be available with slightly better time complexity. Since the computation of these sums and multiplications are mostly independent (only second matrix needs to be shared), I estimated the speedup to approach 4 (with 4 processors) as N increased. That was, however, not the case as can be seen later in the present report. Some possible reasons are presented in the discussion.
+
+As a user of an i5 processor with 4 cores, I am able to run a total of 4 processes (the upper limit as provided in the assignment instructions. That number was held constant throughout all experiments presented in the this report. Each process was bound to a core; a process can only run on its preassigned core in a 1 to 1 relation). Binding cores is achieved using the \emph{--bind-by core} option in mpirun. Running time was calculated using C's clock() function and comparing the time before and after the execution of the code. Care was taken to have the clock start and end times constrain just the execution of the matrix multiplication calculation and not any other I/O operations.
+
+For calculation of average runtime, a script written in bash was developed such that it ran each communication method ten times for each N size n $\in$ \{50, 150, 250, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000\}. Running time for serial computation was measured as part of the blocking communication C file. The average for each (type, n) tuple was calculated and plotted in LibreOffice Calc using pivot tables for simplicity. 
 
 
 \chapter{Communication-specific Implementations}
@@ -62,14 +64,57 @@ Data transfer of the matrices for computation is done using a total of six MPI\_
 
 After all data are received on the worker\footnote{\label{^2}Technically all processes in the presented algorithm are workers; however, I choose to refer to the first as a master and the others as workers even though the master (\#0) does computations on the first division of rows} side, all processes compute the multiplication of both matrices they receive -- in the case of \#0, the first $N/4$ rows.
 
-Upon completion of computations, the workers call the MPI\_Send function with the master is the target. Workers send the result sub-matrices with dimensions $N/4 \times N$ \footnote{\label{^3}If N is not divisible by 4, last process sends back an $(N/4 + N mod 4) \times N$ sized matrix} each. The master receives results using corresponding MPI\_Recv calls with pointers to indexed parts of the results matrix. Completion of all the receive calls end the parallel matrix multiplication algorithm; however, I have added code to compare the result achieved with the parallel approach to the one calculated by the Matrix\_serial function. If they do not produce the same matrix (using IsEqual()), the master exits with an error.
+Upon completion of computations, the workers call the MPI\_Send function with the master is the target. Workers send the result sub-matrices with dimensions $N/4 \times N$ each\footnote{\label{^3}If N is not divisible by 4, last process sends back an $(N/4 + N mod 4) \times N$ sized matrix}. The master receives results using corresponding MPI\_Recv calls with pointers to indexed parts of the results matrix. Completion of all the receive calls end the parallel matrix multiplication algorithm; however, I have added code to compare the result achieved with the parallel approach to the one calculated by the Matrix\_serial function. If they do not produce the same matrix (using IsEqual()), the master exits with an error.
+
+The blocking P2P implementation method proved to be very efficient at speeding up the matrix multiplication process as N grew large (figure \ref{fig:runtime}, blue). Interestingly, the speedup factor surpasses 4 (number of processes p) as N increases to larger values. This will be discussed in more details in the discussion below.
+
+\begin{figure}
+  \includegraphics[width=\linewidth]{figure.png}
+  \caption{The increase of running time as N increases for serial (green), parallel non-blocking (yellow), parallel blocking (blue), and parallel collective (red).}
+  \label{fig:runtime}
+\end{figure}
+
+\begin{table}[]
+\centering
+\caption{Speedup from serial computation for each parallel communication implementation}
+\label{table}
+\begin{tabular}{llll}
+Size of N                 & Blocking & Collective & Non-Blocking \\ \cline{2-4} 
+\multicolumn{1}{l|}{50}   & 1.02     & 1.23       & 1.19         \\
+\multicolumn{1}{l|}{150}  & 1.18     & 1.44       & 1.28         \\
+\multicolumn{1}{l|}{250}  & 1.45     & 1.89       & 1.52         \\
+\multicolumn{1}{l|}{500}  & 2.35     & 2.7        & 1.82         \\
+\multicolumn{1}{l|}{1000} & 3.56     & 4.05       & 2.34         \\
+\multicolumn{1}{l|}{1500} & 4.13     & 4.53       & 2.39         \\
+\multicolumn{1}{l|}{2000} & 4.41     & 4.90       & 2.33         \\
+\multicolumn{1}{l|}{2500} & 4.53     & 5.03       & 2.45         \\
+\multicolumn{1}{l|}{3000} & 4.62     & 5.07       & 2.00         \\
+\multicolumn{1}{l|}{3500} & 4.76     & 4.39       & 2.18         \\
+\multicolumn{1}{l|}{4000} & 4.65     & 5.14       & 2.22        
+\end{tabular}
+\end{table}
 
 \section{Collective communication}
+Similar to the structure in the blocking P2P implementation, the collective communication implementation used the master (\#0) process to create and send chosen rows to the worker processes (\#1-3); instead of sending the second matrix to each worker process using MPI\_Send, MPI\_Bcast was utilized. This in theory allows for a more efficient propagation of data to the different workers. Additionally, the code had to be adapted such that both workers and master execute the MPI\_Bcast call. For the first matrix (split into rows), the MPI\_scatter function was used such that each process gets $N/4$ rows. Similarly, results were collected from workers and added sequentially to the results matrix using the MPI\_Gather function.  
+
+To account for the rows in case of indivisibility by four, the master was assigned with calculating the multiplication of the first $Nmod4$ rows and adding the result to the results matrix prior to executing the common code of calculating assigned result sub-matrices. 
+
+Results indicated that collective communication is as good as blocking P2P and even exceeds its performance especially in the mid-range of N (see figure \ref{fig:runtime}, red). The observation of speedup exceeding four can still be observed here. 
 
 \section{Non-blocking P2P communication}
+The implementations of blocking and non-blocking P2P proved to be very similar. MPI\_Send and MPI\_Recv are replaced with MPI\_Isend and MPI\_Irecv, respectively. An addition of MPI\_Waitall was added after all sends on the master process to ensure that buffers are not overwritten before sending is complete. Similarly, an MPI\_Waitall were added to assert the receipt of both matrices by workers before proceeding with matrix multiplication.
+
+Calculated result sub-matrices were sent back to the master process which had an MPI\_Waitall to confirm that the results matrix was complete before recording the end time for the parallel portion of the code (for running time calculation).
+
+Results from the non-blocking P2P implementation proved worse than both other communication types (\ref{figure fig:runtime}, yellow). More discussion and hypotheses on why that is the case to follow in the discussion.
 
 
 \chapter{General Discussion}
+Serial computation (figure \ref{fig:runtime}, green)) performed incrementally worse than all parallel implementations as N grew larger than 500. Visually, the N-time curve had a quadratic function shape for the serial method; however, no formal curve fitting was done to confirm the O($n^2$) estimated theoretically.
+
+Non-blocking communication fared the worst out of all parallel implementations with a speedup factor of around 2. I speculate that my usage of the wait function calls was not optimal and caused more pauses than necessary. I hypothesize that the usage of a buffered send (MPI\_Ibsend) could have improved performance; however, due to time constraints I was not able to pursue that. Nevertheless, an increase in performance over serial computation was achieved.
+
+Both collective and blocking communication implementations were able to attain quite high speedups that even surpassed the speculated ceiling for speeding up (estimated to be equal to the number of processes $=$ four; see table \ref{table}). I postulate three different possibilities for the cause of this unexpectedly large improvement: 1) the serial computation's speed was affected by its placement \emph{after} completion of the parallel code for the master process, 2) the calls to clock() put the serial code at a disadvantage due to lazy execution of some form, and/or 3) my CPU's threading feature (each core can sustain 2 threads) is affecting the computation in unexpected manner. 
 
 \appendix
 \chapter*{Code appendix}
