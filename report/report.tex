@@ -34,23 +34,23 @@ title=\lstname}
 \tableofcontents
 
 \chapter{Introduction}
-As part of the first assignment, I implemented parallel matrix multiplication utilizing the 3 main MPI communication methods: blocking point-to-point (P2P), non-blocking P2P, and collective. In the present report I will discuss each of my implementations in order discussing running time and factors affecting it.
+As part of the first assignment, I implemented parallel matrix multiplication utilizing the 3 main MPI communication methods: blocking point-to-point (P2P), non-blocking P2P, and collective. In the present report I will discuss each of my implementations including its running time and factors affecting it.
 
 The general definition of a matrix product is the following: for matrix A of size n $\times$ m and matrix B of size m $\times$ p, 
 \begin{equation}
 (AB)_{ij}=\sum\limits_{k=1}^m A_{ik}B_{kj}
 \end{equation}
-The main algorithm used for all three different implementation used the property of matrices such that the matrix multiplication of matrices A and B forming the matrix C can be calculated in parallel by multiplying individual rows of A by the matrix B such that for rows $x \subset i$,
+where i $\in [0,n-1]$  and j $\in [0,p-1]$. The main algorithm used for all three different implementation used the property of matrices such that the matrix multiplication of matrices A and B forming the matrix C can be calculated in parallel by multiplying individual rows of A by the matrix B such that for rows $x \subset i$,
 \begin{equation}
-C_{xj} = A_{xk} \times B_{kj}
+C_{xj} = \sum\limits_{k=1}^m A_{xk} B_{kj}
 \end{equation}
-Given the independence of results for each subset x, rows can be divided across processors available for computation. In cases where the rows are not divisible by the number of processors, the last processor can process the extra remaining rows. Note that adding the last rows to the last single process's load might not be optimal. This will be discussed further in the last chapter. 
+Given the independence of results for each subset x, rows can be divided across processors available for computation. In cases where the rows are not divisible by the number of processors, the last processor can compute the extra remaining rows. Note that adding the last rows to the last single process's load might not be optimal. This will be discussed further in the last chapter. 
 
 As per the assignment instructions, sizes of matrices A and B are defined as $N \times 32$ and $32 \times N$, respectively. This reduces equation 1.2 to only where k $\in [0,31]$\footnote{\label{^1}Zero indexing is assumed for consistency between the equations and the C code presented below.}. To accomplish parallel implementations of matrix multiplication for all the afore-mentioned communication types between processes, I used the equation highlighted in 1.2. Each matrix was represented as a 2D array of floats and kept on the stack. No heap allocation (malloc/calloc) of memory was used and that was seen as sufficient for development purposes.
 
 Theoretically, the execution of a serial matrix computation on a matrix as described in equation 1.1 can be rounded to $n \times m \times p$ multiplications and a similar number of additions. This gives a total of $O(nmp)$, thus an $O(n^3)$ assuming $n>m,p$. Given the constraint in the assignment instructions this can be reduced further (equation 1.2). Since m is constant at 32 and $n=p$, the computation complexity of the problem reduces to growing with $O(n^2)$. Please note that this puts into consideration only the commonly known algorithm of matrix multiplication and others might be available with slightly better time complexity. Since the computation of these sums and multiplications are mostly independent (only second matrix needs to be shared), I estimated the speedup to approach 4 (with 4 processors) as N increased. That was, however, not the case as can be seen later in the present report. Some possible reasons are presented in the discussion.
 
-As a user of an i5 processor with 4 cores, I am able to run a total of 4 processes (the upper limit as provided in the assignment instructions. That number was held constant throughout all experiments presented in the this report. Each process was bound to a core; a process can only run on its preassigned core in a 1 to 1 relation). Binding cores is achieved using the \emph{--bind-by core} option in mpirun. Running time was calculated using C's clock() function and comparing the time before and after the execution of the code. Care was taken to have the clock start and end times constrain just the execution of the matrix multiplication calculation and not any other I/O operations.
+As a user of an i5 processor with 4 cores, I am able to run a total of 4 processes (the upper limit as provided in the assignment instructions. That number was held constant throughout all experiments presented in the report. Each process was bound to a core; a process can only run on its preassigned core in a 1 to 1 relation). Binding cores is achieved using the \emph{--bind-by core} option in mpirun. Running time was calculated using C's clock() function and comparing the time before and after the execution of the code. Care was taken to have the clock start and end times constrain just the execution of the matrix multiplication calculation and not other unrelated I/O operations.
 
 For calculation of average runtime, a script written in bash was developed such that it ran each communication method ten times for each N size n $\in$ \{50, 150, 250, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000\}. Running time for serial computation was measured as part of the blocking communication C file. The average for each (type, n) tuple was calculated and plotted in LibreOffice Calc using pivot tables for simplicity. 
 
@@ -70,7 +70,7 @@ The blocking P2P implementation method proved to be very efficient at speeding u
 
 \begin{figure}
   \includegraphics[width=\linewidth]{figure.png}
-  \caption{The increase of running time as N increases for serial (green), parallel non-blocking (yellow), parallel blocking (blue), and parallel collective (red).}
+  \caption{The increase in running time as N increases for serial (green), parallel non-blocking (yellow), parallel blocking (blue), and parallel collective (red).}
   \label{fig:runtime}
 \end{figure}
 
@@ -106,7 +106,7 @@ The implementations of blocking and non-blocking P2P proved to be very similar. 
 
 Calculated result sub-matrices were sent back to the master process which had an MPI\_Waitall to confirm that the results matrix was complete before recording the end time for the parallel portion of the code (for running time calculation).
 
-Results from the non-blocking P2P implementation proved worse than both other communication types (\ref{figure fig:runtime}, yellow). More discussion and hypotheses on why that is the case to follow in the discussion.
+Results from the non-blocking P2P implementation proved worse than both other communication types (figure \ref{fig:runtime}, yellow). More discussion and hypotheses on why that is the case to follow in the discussion.
 
 
 \chapter{General Discussion}
@@ -114,12 +114,15 @@ Serial computation (figure \ref{fig:runtime}, green)) performed incrementally wo
 
 Non-blocking communication fared the worst out of all parallel implementations with a speedup factor of around 2. I speculate that my usage of the wait function calls was not optimal and caused more pauses than necessary. I hypothesize that the usage of a buffered send (MPI\_Ibsend) could have improved performance; however, due to time constraints I was not able to pursue that. Nevertheless, an increase in performance over serial computation was achieved.
 
-Both collective and blocking communication implementations were able to attain quite high speedups that even surpassed the speculated ceiling for speeding up (estimated to be equal to the number of processes $=$ four; see table \ref{table}). I postulate three different possibilities for the cause of this unexpectedly large improvement: 1) the serial computation's speed was affected by its placement \emph{after} completion of the parallel code for the master process, 2) the calls to clock() put the serial code at a disadvantage due to lazy execution of some form, and/or 3) my CPU's threading feature (each core can sustain 2 threads) is affecting the computation in unexpected manner. 
+Both collective and blocking communication implementations were able to attain quite high speedups that even surpassed the speculated ceiling for speeding up (estimated to be equal to the number of processes $=$ four; see table \ref{table}). I postulate five different possibilities for the cause of this unexpectedly large improvement: 1) the serial computation's speed was affected by its placement \emph{after} completion of the parallel code for the master process, 2) the calls to clock() put the serial code at a disadvantage due to lazy execution of some form, 3) the extra call to the function Matrix\_serial() and its addition to stack-related memory which is already filled with matrix data could be slowing down access to the variables, 4) caching is more effectively utilized using parallel computations, and/or 5) my CPU's threading feature (each core can sustain 2 threads) is affecting the computation in unexpected manner. Due to time constraints I was not able to run more experiments/simulations to reach a conclusive answer on what factors affected the slowdown (or the extra speedup) in the serial (parallel) implementation. It is important to note that enough care was taken to ensure no swap space was utilized during execution for chosen values of N and that all calculations were done from memory/cache.
+
+In conclusion, different modes of communication between parallel processes in MPI were examined and tested for matrix multiplication. All modes were at least twice as fast as serial execution for large N, with the speedup factor exceeding 5 in some cases (table \ref{table}).  
 
 \appendix
 \chapter*{Code appendix}
 
 \lstinputlisting[language=bash, breaklines]{../makefile}
+\lstinputlisting[language=bash, breaklines]{../test.sh}
 \lstinputlisting[breaklines]{../src/blocking.c}
 \lstinputlisting[breaklines]{../src/nonblocking.c}
 \lstinputlisting[breaklines]{../src/collective.c}
